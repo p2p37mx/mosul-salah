@@ -11,15 +11,33 @@ import android.widget.TextView
 
 /** ألوان وأدوات بناء الواجهة */
 object Ui {
-    val BG = Color.parseColor("#0D1B1E")
-    val CARD = Color.parseColor("#15282C")
-    val ROW = Color.parseColor("#132427")
-    val LINE = Color.parseColor("#22393E")
-    val NAV = Color.parseColor("#102326")
-    val TEXT = Color.parseColor("#F2EEE3")
-    val MUTED = Color.parseColor("#9FB1AE")
-    val ACCENT = Color.parseColor("#E0B25A")
-    val DOT = Color.parseColor("#3C5A5F")
+    var dark = true
+    var BG = Color.parseColor("#0D1B1E")
+    var CARD = Color.parseColor("#15282C")
+    var ROW = Color.parseColor("#132427")
+    var LINE = Color.parseColor("#22393E")
+    var NAV = Color.parseColor("#102326")
+    var TEXT = Color.parseColor("#F2EEE3")
+    var MUTED = Color.parseColor("#9FB1AE")
+    var ACCENT = Color.parseColor("#E0B25A")
+    var DOT = Color.parseColor("#3C5A5F")
+
+    /** الوضع الليلي (القمر) أو النهاري (الشمس) */
+    fun applyTheme(isDark: Boolean) {
+        dark = isDark
+        if (isDark) {
+            BG = Color.parseColor("#0D1B1E"); CARD = Color.parseColor("#15282C"); ROW = Color.parseColor("#132427")
+            LINE = Color.parseColor("#22393E"); NAV = Color.parseColor("#102326"); TEXT = Color.parseColor("#F2EEE3")
+            MUTED = Color.parseColor("#9FB1AE"); ACCENT = Color.parseColor("#E0B25A"); DOT = Color.parseColor("#3C5A5F")
+        } else {
+            BG = Color.parseColor("#F6F3EC"); CARD = Color.parseColor("#FFFFFF"); ROW = Color.parseColor("#EFEAE0")
+            LINE = Color.parseColor("#E2DACB"); NAV = Color.parseColor("#FFFFFF"); TEXT = Color.parseColor("#1B2A2C")
+            MUTED = Color.parseColor("#5E6B69"); ACCENT = Color.parseColor("#8C5E0E"); DOT = Color.parseColor("#C9BFA8")
+        }
+    }
+
+    /** نفس اللون بشفافية (0-255) */
+    fun alpha(color: Int, a: Int): Int = Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
 
     fun dp(c: Context, v: Int): Int = (v * c.resources.displayMetrics.density + 0.5f).toInt()
 

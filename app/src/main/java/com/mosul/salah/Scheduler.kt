@@ -36,6 +36,8 @@ object Scheduler {
         } catch (e: SecurityException) {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
         }
+        PrayerWidget.updateAll(ctx)
+        PrayerWidget.scheduleRefresh(ctx)
     }
 }
 

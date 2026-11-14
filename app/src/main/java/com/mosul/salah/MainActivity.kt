@@ -57,6 +57,14 @@ class MainActivity : Activity() {
     private val REQ_AUDIO = 11
     private val REQ_VIDEO = 12
     private val REQ_IMAGE = 13
+    private val REQ_BG = 14
+    private lateinit var rootView: LinearLayout
+
+    /** الرسومات الجاهزة لمعالم الموصل */
+    private val BUILT_IN_BG = intArrayOf(R.drawable.bg_hadba, R.drawable.bg_dome, R.drawable.bg_river)
+
+    private fun bgDir(): File = File(filesDir, "bg").apply { mkdirs() }
+    private fun userBgs(): List<File> = (bgDir().listFiles()?.toList() ?: emptyList()).sortedBy { it.name }
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -68,6 +76,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        Ui.applyTheme(prefs.darkTheme)
         window.statusBarColor = Ui.BG
         window.navigationBarColor = Ui.NAV
 
@@ -83,6 +92,7 @@ class MainActivity : Activity() {
             setPadding(0, Ui.dp(this@MainActivity, 6), 0, Ui.dp(this@MainActivity, 6))
         }
         root.addView(nav, LinearLayout.LayoutParams(-1, -2))
+        rootView = root
         setContentView(root)
 
         calSel = PrayerCalc.today(this)
@@ -97,9 +107,55 @@ class MainActivity : Activity() {
         show(0)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // كل دخول للتطبيق تتبدل صورة الخلفية
+        prefs.bgIndex = prefs.bgIndex + 1
+        if (::content.isInitialized && tab == 0) render(false)
+    }
+
     override fun onResume() {
         super.onResume()
         handler.post(ticker)
+        PrayerWidget.updateAll(this)
+    }
+
+    /** تبديل الشمس / القمر */
+    private fun toggleTheme() {
+        prefs.darkTheme = !prefs.darkTheme
+        Ui.applyTheme(prefs.darkTheme)
+        window.statusBarColor = Ui.BG
+        window.navigationBarColor = Ui.NAV
+        rootView.setBackgroundColor(Ui.BG)
+        nav.setBackgroundColor(Ui.NAV)
+        buildNav()
+        render(true)
+        PrayerWidget.updateAll(this)
+    }
+
+    /** صورة الخلفية الحالية: رسومات جاهزة + صورك */
+    private fun addBackground() {
+        val users = userBgs()
+        val total = BUILT_IN_BG.size + users.size
+        val idx = ((prefs.bgIndex % total) + total) % total
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        var ok = false
+        if (idx < BUILT_IN_BG.size) {
+            img.setImageResource(BUILT_IN_BG[idx]); ok = true
+        } else {
+            val bmp = AdhanService.loadBitmap(users[idx - BUILT_IN_BG.size].absolutePath, 1400)
+            if (bmp != null) { img.setImageBitmap(bmp); ok = true }
+        }
+        if (!ok) img.setImageResource(BUILT_IN_BG[0])
+        content.addView(img, FrameLayout.LayoutParams(-1, -1))
+        // طبقة شفافة حتى الكتابة تنقرا (أغمق تحت)
+        val scrim = View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Ui.alpha(Ui.BG, if (Ui.dark) 90 else 150), Ui.alpha(Ui.BG, if (Ui.dark) 200 else 225), Ui.alpha(Ui.BG, 245))
+            )
+        }
+        content.addView(scrim, FrameLayout.LayoutParams(-1, -1))
     }
 
     override fun onPause() {
@@ -138,6 +194,7 @@ class MainActivity : Activity() {
         clockView = null
         countView = null
         content.removeAllViews()
+        if (tab == 0) addBackground()
         val body = when (tab) {
             1 -> calendarView()
             2 -> adhkarView()
@@ -171,13 +228,25 @@ class MainActivity : Activity() {
         val clock = Ui.text(this, "", 15f, Ui.MUTED)
         clockView = clock
         head.addView(clock)
+        head.addView(ImageView(this).apply {
+            setImageResource(if (Ui.dark) R.drawable.ic_sun else R.drawable.ic_moon)
+            setColorFilter(Ui.ACCENT)
+            contentDescription = if (Ui.dark) "الوضع النهاري" else "الوضع الليلي"
+            background = Ui.bg(this@MainActivity, Ui.alpha(Ui.CARD, 200), 14, Ui.LINE)
+            val pd = Ui.dp(this@MainActivity, 10)
+            setPadding(pd, pd, pd, pd)
+            setOnClickListener { toggleTheme() }
+        }, LinearLayout.LayoutParams(Ui.dp(this, 44), Ui.dp(this, 44)).apply { marginStart = Ui.dp(this@MainActivity, 12) })
         p.addView(head)
         p.addView(Ui.text(this, "${Hijri.dayName(today)} ${Hijri.gText(today)}", 15f))
         p.addView(Ui.text(this, Hijri.text(this, today), 15f, Ui.ACCENT))
 
         val (ni, nt) = PrayerCalc.next(this, now, false)
         nextTime = nt
-        val hero = Ui.card(this).apply { gravity = Gravity.CENTER_HORIZONTAL }
+        val hero = Ui.card(this).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = Ui.bg(this@MainActivity, Ui.alpha(Ui.CARD, 215), 20, Ui.LINE)
+        }
         hero.addView(Ui.text(this, "الصلاة القادمة", 14f, Ui.MUTED).apply { gravity = Gravity.CENTER })
         hero.addView(Ui.text(this, PrayerCalc.NAMES[ni], 30f, Ui.ACCENT, true).apply { gravity = Gravity.CENTER })
         val cd = Ui.text(this, "", 44f, Ui.TEXT, true).apply {
@@ -195,7 +264,7 @@ class MainActivity : Activity() {
         for (i in 0 until 6) {
             val on = i == nextToday
             val row = Ui.hbox(this).apply {
-                background = Ui.bg(this@MainActivity, if (on) Ui.ACCENT else Ui.ROW, 16)
+                background = Ui.bg(this@MainActivity, if (on) Ui.ACCENT else Ui.alpha(Ui.ROW, 215), 16)
                 setPadding(Ui.dp(this@MainActivity, 18), 0, Ui.dp(this@MainActivity, 18), 0)
                 minimumHeight = Ui.dp(this@MainActivity, 52)
             }
@@ -407,6 +476,37 @@ class MainActivity : Activity() {
         }
         p.addView(clock, LinearLayout.LayoutParams(-1, -2))
 
+        // المظهر والخلفيات
+        val look = Ui.card(this)
+        look.addView(Ui.text(this, "المظهر", 16f, Ui.TEXT, true))
+        look.addView(Ui.segment(this, arrayOf("ليلي (قمر)", "نهاري (شمس)"), if (prefs.darkTheme) 0 else 1) {
+            if ((it == 0) != prefs.darkTheme) toggleTheme()
+        }, LinearLayout.LayoutParams(-1, -2))
+        val ub = userBgs()
+        look.addView(Ui.text(this, "صور الخلفية", 15f, Ui.TEXT, true))
+        look.addView(Ui.text(this,
+            "تتبدل كل ما تفتح التطبيق: ${BUILT_IN_BG.size} رسومات لمعالم الموصل" +
+                if (ub.isNotEmpty()) " + ${ub.size} من صورك" else "", 12f, Ui.MUTED))
+        val lb = Ui.hbox(this)
+        lb.addView(Ui.button(this, "إضافة صور جوامع", false) {
+            val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("image/*")
+                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(i, REQ_BG)
+            } catch (e: Exception) { toast("ما لكيت تطبيق ملفات") }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (ub.isNotEmpty()) {
+            lb.addView(View(this), LinearLayout.LayoutParams(Ui.dp(this, 8), 1))
+            lb.addView(Ui.button(this, "حذف صوري", false) {
+                ub.forEach { it.delete() }; render(true)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        look.addView(lb, LinearLayout.LayoutParams(-1, -2))
+        p.addView(look, LinearLayout.LayoutParams(-1, -2))
+
         // ٢) صوت الأذان
         val snd = Ui.card(this)
         snd.addView(Ui.text(this, "صوت الأذان", 16f, Ui.TEXT, true))
@@ -598,6 +698,11 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_BG) {
+            if (resultCode != Activity.RESULT_OK || data == null) return
+            importBackgrounds(data)
+            return
+        }
         val uri = data?.data ?: return
         if (resultCode != Activity.RESULT_OK) return
         val name = displayName(uri)
@@ -623,6 +728,33 @@ class MainActivity : Activity() {
                     prefs.mediaIsVideo = requestCode == REQ_VIDEO
                 }
                 toast("تم ✓")
+                if (tab == 3) render(true)
+            }
+        }.start()
+    }
+
+    /** نسخ صور الخلفية (وحدة أو أكثر) */
+    private fun importBackgrounds(data: Intent) {
+        val uris = ArrayList<Uri>()
+        val clip = data.clipData
+        if (clip != null) {
+            for (k in 0 until clip.itemCount) clip.getItemAt(k).uri?.let { uris.add(it) }
+        } else {
+            data.data?.let { uris.add(it) }
+        }
+        if (uris.isEmpty()) return
+        toast("جاري النسخ…")
+        Thread {
+            var n = 0
+            uris.forEachIndexed { k, u ->
+                val target = File(bgDir(), "bg_${System.currentTimeMillis()}_$k")
+                try {
+                    contentResolver.openInputStream(u)?.use { inp -> target.outputStream().use { out -> inp.copyTo(out) } }
+                    if (target.length() > 0) n++ else target.delete()
+                } catch (e: Exception) { target.delete() }
+            }
+            runOnUiThread {
+                toast("انضافت $n صورة ✓")
                 if (tab == 3) render(true)
             }
         }.start()

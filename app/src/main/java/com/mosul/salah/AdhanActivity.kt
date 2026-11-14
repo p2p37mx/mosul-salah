@@ -29,6 +29,7 @@ class AdhanActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Ui.applyTheme(Prefs(this).darkTheme)
         if (Build.VERSION.SDK_INT < 27) {
             @Suppress("DEPRECATION")
             window.addFlags(

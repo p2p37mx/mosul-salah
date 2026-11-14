@@ -26,6 +26,16 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("asrFactor", 1)
         set(v) = sp.edit().putInt("asrFactor", v).apply()
 
+    /** true = ليلي (قمر)، false = نهاري (شمس) */
+    var darkTheme: Boolean
+        get() = sp.getBoolean("darkTheme", true)
+        set(v) = sp.edit().putBoolean("darkTheme", v).apply()
+
+    /** رقم صورة الخلفية الحالية (تتبدل كل فتح) */
+    var bgIndex: Int
+        get() = sp.getInt("bgIndex", 0)
+        set(v) = sp.edit().putInt("bgIndex", v).apply()
+
     var hijriAdjust: Int
         get() = sp.getInt("hijriAdjust", 0)
         set(v) = sp.edit().putInt("hijriAdjust", v).apply()
