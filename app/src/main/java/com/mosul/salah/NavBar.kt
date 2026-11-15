@@ -18,8 +18,8 @@ import android.widget.TextView
  * الشريط السفلي: الصفحة المختارة يرتفع فوگها قوس، وأيقونتها بدائرة ذهبية
  */
 class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx) {
-    private val labels = arrayOf("الأوقات", "التقويم", "الأذكار", "الضبط")
-    private val icons = intArrayOf(R.drawable.ic_nav_time, R.drawable.ic_nav_cal, R.drawable.ic_nav_dhikr, R.drawable.ic_nav_set)
+    private val labels = arrayOf("الأوقات", "التقويم", "القبلة", "الأذكار", "الضبط")
+    private val icons = intArrayOf(R.drawable.ic_nav_time, R.drawable.ic_nav_cal, R.drawable.ic_nav_qibla, R.drawable.ic_nav_dhikr, R.drawable.ic_nav_set)
 
     private val row = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -42,7 +42,7 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
     private fun dp(v: Int): Float = v * resources.displayMetrics.density
 
     /** المسافة من فوگ لحد خط الشريط (القوس يطلع فوگها) */
-    private val barTop get() = dp(22)
+    private val barTop get() = dp(16)
 
     init {
         setWillNotDraw(false)
@@ -59,21 +59,21 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
             }
             val ic = ImageView(ctx).apply {
                 setImageResource(icons[i])
-                val pd = dp(10).toInt()
+                val pd = dp(8).toInt()
                 setPadding(pd, pd, pd, pd)
             }
             val tv = TextView(ctx).apply {
                 text = labels[i]
-                textSize = 12f
+                textSize = 11f
                 gravity = Gravity.CENTER
             }
-            item.addView(ic, LinearLayout.LayoutParams(dp(46).toInt(), dp(46).toInt()))
+            item.addView(ic, LinearLayout.LayoutParams(dp(38).toInt(), dp(38).toInt()))
             item.addView(tv)
             row.addView(item, LinearLayout.LayoutParams(0, -1, 1f))
             items.add(item); iconViews.add(ic); textViews.add(tv)
         }
         clipToPadding = false
-        addView(row, LayoutParams(-1, -1).apply { topMargin = dp(18).toInt() })
+        addView(row, LayoutParams(-1, -1).apply { topMargin = dp(14).toInt() })
         applyColors()
     }
 
@@ -90,12 +90,12 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
         val ic = iconViews[i]
         val tv = textViews[i]
         if (on) {
-            ic.background = Ui.bg(context, Ui.ACCENT, 23)
+            ic.background = Ui.bg(context, Ui.ACCENT, 19)
             ic.setColorFilter(Ui.BG)
-            ic.translationY = -dp(14)
+            ic.translationY = -dp(12)
             tv.setTextColor(Ui.ACCENT)
             tv.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-            tv.translationY = dp(2)
+            tv.translationY = 0f
         } else {
             ic.background = null
             ic.setColorFilter(Ui.MUTED)
@@ -138,15 +138,15 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
         val w = width.toFloat()
         val h = height.toFloat()
         val t = barTop
-        val r = dp(36)      // نصف عرض القوس
-        val lift = dp(18)   // ارتفاع القوس فوگ الخط
+        val r = dp(30)      // نصف عرض القوس
+        val lift = dp(14)   // ارتفاع القوس فوگ الخط
         val cx = if (bumpX < 0) w / 2 else bumpX
 
         path.reset()
         path.moveTo(0f, t)
-        path.lineTo(cx - r - dp(14), t)
+        path.lineTo(cx - r - dp(12), t)
         path.cubicTo(cx - r, t, cx - r * 0.75f, t - lift, cx, t - lift)
-        path.cubicTo(cx + r * 0.75f, t - lift, cx + r, t, cx + r + dp(14), t)
+        path.cubicTo(cx + r * 0.75f, t - lift, cx + r, t, cx + r + dp(12), t)
         path.lineTo(w, t)
         path.lineTo(w, h)
         path.lineTo(0f, h)
@@ -156,9 +156,9 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
         // خط رفيع على الحافة العليا حتى يبين القوس
         path.reset()
         path.moveTo(0f, t)
-        path.lineTo(cx - r - dp(14), t)
+        path.lineTo(cx - r - dp(12), t)
         path.cubicTo(cx - r, t, cx - r * 0.75f, t - lift, cx, t - lift)
-        path.cubicTo(cx + r * 0.75f, t - lift, cx + r, t, cx + r + dp(14), t)
+        path.cubicTo(cx + r * 0.75f, t - lift, cx + r, t, cx + r + dp(12), t)
         path.lineTo(w, t)
         canvas.drawPath(path, stroke)
     }

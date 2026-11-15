@@ -96,7 +96,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 )
             }
             val open = Intent(ctx, MainActivity::class.java)
-                .putExtra(MainActivity.EXTRA_TAB, 2)
+                .putExtra(MainActivity.EXTRA_TAB, 3)
                 .putExtra(MainActivity.EXTRA_DHIKR_TAB, 2)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             val pi = PendingIntent.getActivity(

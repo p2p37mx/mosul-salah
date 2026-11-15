@@ -41,6 +41,8 @@ class MainActivity : Activity() {
 
     // الأذكار
     private var dhikrTab = 0
+    private var dhikrCat = -1
+    private var dhikrQuery = ""
     private val counts = HashMap<String, Int>()
 
     // الساعة اليدوية (القيم المعروضة قبل الحفظ)
@@ -71,6 +73,85 @@ class MainActivity : Activity() {
     private fun bgDir(): File = File(filesDir, "bg").apply { mkdirs() }
     private fun userBgs(): List<File> = (bgDir().listFiles()?.toList() ?: emptyList()).sortedBy { it.name }
 
+    // ───── البوصلة ─────
+    private var compass: CompassView? = null
+    private var qiblaStatus: TextView? = null
+    private var calibHint: TextView? = null
+    private var smoothAz = Double.NaN
+    private var wasAligned = false
+    private val declination: Float by lazy {
+        android.hardware.GeomagneticField(PrayerCalc.LAT.toFloat(), PrayerCalc.LNG.toFloat(), 220f, System.currentTimeMillis()).declination
+    }
+    private val rotMat = FloatArray(9)
+    private val orient = FloatArray(3)
+    private val sensorListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(e: android.hardware.SensorEvent) {
+            android.hardware.SensorManager.getRotationMatrixFromVector(rotMat, e.values)
+            android.hardware.SensorManager.getOrientation(rotMat, orient)
+            var az = Math.toDegrees(orient[0].toDouble()) + declination
+            az = (az + 360.0) % 360.0
+            // تنعيم الحركة
+            smoothAz = if (smoothAz.isNaN()) az else (smoothAz + CompassView.diff(az, smoothAz) * 0.15 + 360.0) % 360.0
+            val cv = compass ?: return
+            cv.azimuth = smoothAz
+            val d = CompassView.diff(CompassView.QIBLA, smoothAz)
+            qiblaStatus?.text = when {
+                cv.aligned -> "أنت باتجاه القبلة ✓"
+                d > 0 -> "استدر لليمين ${Math.round(d)}°"
+                else -> "استدر لليسار ${Math.round(-d)}°"
+            }
+            qiblaStatus?.setTextColor(if (cv.aligned) Ui.ACCENT else Ui.TEXT)
+            if (cv.aligned && !wasAligned) buzz(40L)
+            wasAligned = cv.aligned
+        }
+
+        override fun onAccuracyChanged(s: android.hardware.Sensor, accuracy: Int) {
+            calibHint?.visibility = if (accuracy <= android.hardware.SensorManager.SENSOR_STATUS_ACCURACY_LOW) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun startCompass() {
+        val sm = getSystemService(android.hardware.SensorManager::class.java) ?: return
+        val sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR) ?: return
+        sm.registerListener(sensorListener, sensor, android.hardware.SensorManager.SENSOR_DELAY_UI)
+    }
+
+    private fun stopCompass() {
+        try { getSystemService(android.hardware.SensorManager::class.java)?.unregisterListener(sensorListener) } catch (_: Exception) {}
+        compass = null
+    }
+
+    private fun qiblaView(): View {
+        val p = page()
+        p.addView(title("اتجاه القبلة"))
+        val q = Math.round(CompassView.QIBLA)
+        p.addView(Ui.text(this, "القبلة من الموصل: $q° من الشمال (جنوب مع ميل لليمين)", 13f, Ui.MUTED))
+        val sm = getSystemService(android.hardware.SensorManager::class.java)
+        val has = sm?.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR) != null
+        if (!has) {
+            p.addView(Ui.card(this).apply {
+                addView(Ui.text(this@MainActivity, "جهازك ما بيه حساس بوصلة، فما نكدر نحدد الاتجاه بالجوال.", 15f))
+                addView(Ui.text(this@MainActivity, "القبلة بالموصل تقريباً باتجاه $q° من الشمال.", 13f, Ui.MUTED))
+            }, LinearLayout.LayoutParams(-1, -2))
+            return p
+        }
+        val cv = CompassView(this)
+        compass = cv
+        if (!smoothAz.isNaN()) cv.azimuth = smoothAz
+        p.addView(cv, LinearLayout.LayoutParams(-1, Ui.dp(this, 340)))
+        val st = Ui.text(this, "حرّك الجوال…", 20f, Ui.TEXT, true).apply { gravity = Gravity.CENTER }
+        qiblaStatus = st
+        p.addView(st, LinearLayout.LayoutParams(-1, -2))
+        p.addView(Ui.text(this, "خلي الجوال مسطّح على يدك، ولفّ لحد ما السهم الذهبي يصير فوگ.", 13f, Ui.MUTED).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, -2))
+        val ch = Ui.card(this).apply { visibility = View.GONE }
+        ch.addView(Ui.text(this, "البوصلة تحتاج معايرة", 15f, Ui.ACCENT, true))
+        ch.addView(Ui.text(this, "حرّك الجوال بالهوا بشكل رقم 8 كم مرة، وابعده عن الحديد والسماعات والشاحن.", 13f, Ui.MUTED))
+        calibHint = ch
+        p.addView(ch, LinearLayout.LayoutParams(-1, -2))
+        startCompass()
+        return p
+    }
+
     private val ticker = object : Runnable {
         override fun run() {
             tick()
@@ -93,7 +174,7 @@ class MainActivity : Activity() {
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         nav = NavBar(this) { show(it) }
-        root.addView(nav, LinearLayout.LayoutParams(-1, Ui.dp(this, 92)))
+        root.addView(nav, LinearLayout.LayoutParams(-1, Ui.dp(this, 70)))
         rootView = root
         setContentView(root)
 
@@ -106,7 +187,10 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         Scheduler.scheduleNext(this)
-        dhikrTab = intent.getIntExtra(EXTRA_DHIKR_TAB, dhikrTab)
+        if (intent.hasExtra(EXTRA_DHIKR_TAB)) {
+            dhikrCat = Adhkar.CAT_DAY
+            dhikrTab = intent.getIntExtra(EXTRA_DHIKR_TAB, Adhkar.SEC_AFTER_PRAYER)
+        }
         show(intent.getIntExtra(EXTRA_TAB, 0))
     }
 
@@ -121,6 +205,7 @@ class MainActivity : Activity() {
         super.onResume()
         handler.post(ticker)
         PrayerWidget.updateAll(this)
+        if (::content.isInitialized && tab == 2 && compass == null) render(false)
     }
 
     /** تبديل الشمس / القمر */
@@ -156,6 +241,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        stopCompass()
         handler.removeCallbacks(ticker)
         super.onPause()
     }
@@ -173,11 +259,13 @@ class MainActivity : Activity() {
         val y = if (keepScroll) scroll?.scrollY ?: 0 else 0
         clockView = null
         countView = null
+        stopCompass()
         content.removeAllViews()
         val body = when (tab) {
             1 -> calendarView()
-            2 -> adhkarView()
-            3 -> settingsView()
+            2 -> qiblaView()
+            3 -> adhkarView()
+            4 -> settingsView()
             else -> timesView()
         }
         val sv = ScrollView(this).apply {
@@ -391,13 +479,142 @@ class MainActivity : Activity() {
 
     // ───────────── الأذكار ─────────────
 
+    /** الأذكار: شبكة الفئات، أو فئة مفتوحة */
     private fun adhkarView(): View {
         val p = page()
-        p.addView(title("الأذكار"))
-        p.addView(Ui.segment(this, Adhkar.TABS, dhikrTab) { dhikrTab = it; render(false) }, LinearLayout.LayoutParams(-1, -2))
+        if (dhikrCat < 0) {
+            categoriesGrid(p)
+            return p
+        }
+        val cat = Adhkar.CATEGORIES[dhikrCat]
+        // الرأس: رجوع + اسم الفئة
+        val head = Ui.hbox(this)
+        head.addView(Ui.small(this, "›", "رجوع") { dhikrCat = -1; render(false) })
+        head.addView(Ui.text(this, cat.name, 22f, Ui.TEXT, true).apply {
+            setPadding(Ui.dp(this@MainActivity, 12), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        p.addView(head, LinearLayout.LayoutParams(-1, -2))
+        if (cat.sections.size > 1) {
+            if (dhikrTab >= cat.sections.size) dhikrTab = 0
+            val chips = Ui.hbox(this)
+            cat.sections.forEachIndexed { k, sec ->
+                val on = k == dhikrTab
+                chips.addView(TextView(this).apply {
+                    text = sec.title
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                    setTextColor(if (on) Ui.BG else Ui.TEXT)
+                    background = if (on) Ui.bg(this@MainActivity, Ui.ACCENT, 18) else Ui.bg(this@MainActivity, Ui.ROW, 18, Ui.LINE)
+                    minHeight = Ui.dp(this@MainActivity, 40)
+                    setPadding(Ui.dp(this@MainActivity, 16), 0, Ui.dp(this@MainActivity, 16), 0)
+                    setOnClickListener { dhikrTab = k; render(false) }
+                }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = Ui.dp(this@MainActivity, 8) })
+            }
+            p.addView(android.widget.HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(chips)
+            }, LinearLayout.LayoutParams(-1, -2))
+        } else dhikrTab = 0
+        val sec = cat.sections[dhikrTab]
+        val hint = when {
+            dhikrCat == Adhkar.CAT_DAY && dhikrTab == 0 -> "من بعد الفجر لحد طلوع الشمس"
+            dhikrCat == Adhkar.CAT_DAY && dhikrTab == 1 -> "من بعد العصر لحد المغرب"
+            dhikrCat == Adhkar.CAT_DAY && dhikrTab == 2 -> "بعد السلام من كل صلاة"
+            dhikrCat == Adhkar.CAT_DAY && dhikrTab == 3 -> "قبل ما تنام"
+            else -> "${sec.items.size} ذكر"
+        }
+        val headTitle = if (cat.sections.size > 1) "أذكار ${sec.title}" else sec.title
+        dhikrList(p, sec.items, "$dhikrCat-$dhikrTab", headTitle, hint)
+        return p
+    }
 
-        val list = Adhkar.list(dhikrTab)
-        val tabKey = dhikrTab
+    /** شبكة الفئات بعمودين + بحث */
+    private fun categoriesGrid(p: LinearLayout) {
+        p.addView(title("الأذكار"))
+        val search = android.widget.EditText(this).apply {
+            hint = "بحث بالأذكار"
+            setHintTextColor(Ui.MUTED)
+            setTextColor(Ui.TEXT)
+            textSize = 15f
+            isSingleLine = true
+            background = Ui.bg(this@MainActivity, Ui.ROW, 16, Ui.LINE)
+            setPadding(Ui.dp(this@MainActivity, 16), 0, Ui.dp(this@MainActivity, 16), 0)
+            minHeight = Ui.dp(this@MainActivity, 48)
+            setText(dhikrQuery)
+        }
+        p.addView(search, LinearLayout.LayoutParams(-1, -2))
+        val gridBox = Ui.vbox(this, 12)
+        val resultsBox = Ui.vbox(this, 12)
+        p.addView(gridBox, LinearLayout.LayoutParams(-1, -2))
+        p.addView(resultsBox, LinearLayout.LayoutParams(-1, -2))
+        p.addView(Ui.text(this, "حصن المسلم", 12f, Ui.MUTED))
+
+        val cats = Adhkar.CATEGORIES
+        var row: LinearLayout? = null
+        cats.forEachIndexed { i, c ->
+            if (i % 2 == 0) {
+                val r = Ui.hbox(this)
+                row = r
+                gridBox.addView(r, LinearLayout.LayoutParams(-1, -2))
+            }
+            val hue = android.graphics.Color.parseColor(c.hue)
+            val card = android.widget.FrameLayout(this).apply {
+                background = Ui.bg(this@MainActivity, blend(Ui.CARD, hue, if (Ui.dark) 0.28f else 0.18f), 20)
+                isClickable = true
+                contentDescription = c.name
+                setOnClickListener { dhikrCat = i; dhikrTab = 0; render(false) }
+            }
+            card.addView(Ui.text(this, c.name, 17f, Ui.TEXT, true).apply {
+                setPadding(Ui.dp(this@MainActivity, 14), Ui.dp(this@MainActivity, 12), Ui.dp(this@MainActivity, 14), 0)
+            }, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.TOP or Gravity.START))
+            card.addView(Ui.text(this, "${c.count} ذكر", 14f, Ui.MUTED).apply {
+                setPadding(Ui.dp(this@MainActivity, 14), 0, Ui.dp(this@MainActivity, 14), Ui.dp(this@MainActivity, 12))
+            }, android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START))
+            card.addView(ImageView(this).apply { setImageResource(c.icon) },
+                android.widget.FrameLayout.LayoutParams(Ui.dp(this, 56), Ui.dp(this, 56), Gravity.BOTTOM or Gravity.END).apply {
+                    setMargins(Ui.dp(this@MainActivity, 12), 0, Ui.dp(this@MainActivity, 12), Ui.dp(this@MainActivity, 10))
+                })
+            row?.addView(card, LinearLayout.LayoutParams(0, Ui.dp(this, 128), 1f).apply {
+                if (i % 2 == 0) { marginEnd = Ui.dp(this@MainActivity, 6) } else { marginStart = Ui.dp(this@MainActivity, 6) }
+            })
+        }
+
+        fun showResults(q: String) {
+            dhikrQuery = q
+            resultsBox.removeAllViews()
+            if (q.isBlank()) { gridBox.visibility = View.VISIBLE; return }
+            gridBox.visibility = View.GONE
+            val all = cats[0].sections[0].items
+            val found = all.withIndex().filter { (_, d) -> d.text.contains(q.trim()) || d.note.contains(q.trim()) }
+                .distinctBy { it.value.text }.take(40)
+            if (found.isEmpty()) {
+                resultsBox.addView(Ui.text(this, "ما لكيت شي", 14f, Ui.MUTED))
+                return
+            }
+            dhikrList(resultsBox, found.map { it.value }, "search-${q.trim()}", "نتائج البحث", "${found.size} نتيجة")
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun onTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
+            override fun afterTextChanged(e: android.text.Editable?) { showResults(e?.toString() ?: "") }
+        })
+        if (dhikrQuery.isNotBlank()) showResults(dhikrQuery)
+    }
+
+    /** خلط لونين (للكروت الملونة) */
+    private fun blend(a: Int, b: Int, t: Float): Int {
+        val c = android.graphics.Color.valueOf(a)
+        val d = android.graphics.Color.valueOf(b)
+        return android.graphics.Color.rgb(
+            c.red() + (d.red() - c.red()) * t,
+            c.green() + (d.green() - c.green()) * t,
+            c.blue() + (d.blue() - c.blue()) * t
+        )
+    }
+
+    /** ملخص التقدم + كروت الأذكار بالعداد الدائري */
+    private fun dhikrList(p: LinearLayout, list: List<Dhikr>, tabKey: String, headTitle: String, headHint: String) {
         fun leftOf(i: Int): Int = counts["$tabKey-$i"] ?: list[i].count
         fun doneCount(): Int = list.indices.count { leftOf(it) == 0 }
 
@@ -405,10 +622,8 @@ class MainActivity : Activity() {
         val sum = Ui.card(this).apply {
             background = Ui.bg(this@MainActivity, Ui.alpha(Ui.ACCENT, if (Ui.dark) 34 else 26), 20, Ui.alpha(Ui.ACCENT, 120))
         }
-        val heads = arrayOf("أذكار الصباح", "أذكار المساء", "أذكار بعد الصلاة")
-        val hints = arrayOf("من بعد الفجر لحد طلوع الشمس", "من بعد العصر لحد المغرب", "بعد السلام من كل صلاة")
-        sum.addView(Ui.text(this, heads[tabKey], 20f, Ui.ACCENT, true))
-        sum.addView(Ui.text(this, hints[tabKey], 13f, Ui.MUTED))
+        sum.addView(Ui.text(this, headTitle, 20f, Ui.ACCENT, true))
+        sum.addView(Ui.text(this, headHint, 13f, Ui.MUTED))
         val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = list.size
             progress = doneCount()
@@ -504,7 +719,7 @@ class MainActivity : Activity() {
                     // ينتقل للذكر اللي بعده
                     if (i + 1 < cards.size) {
                         val next = cards[i + 1]
-                        scroll?.postDelayed({ scroll?.smoothScrollTo(0, next.top - Ui.dp(this, 12)) }, 250)
+                        scroll?.postDelayed({ scroll?.smoothScrollTo(0, yInScroll(next) - Ui.dp(this, 12)) }, 250)
                     }
                 }
             }
@@ -515,7 +730,25 @@ class MainActivity : Activity() {
             counts.keys.filter { it.startsWith("$tabKey-") }.toList().forEach { counts.remove(it) }
             render(false)
         }, LinearLayout.LayoutParams(-1, -2))
-        return p
+    }
+
+    /** مكان الكارت داخل الصفحة (حتى ننزل له) */
+    private fun yInScroll(v: View): Int {
+        var y = 0
+        var cur: View? = v
+        val stop = scroll?.getChildAt(0)
+        while (cur != null && cur !== stop) {
+            y += cur.top
+            cur = cur.parent as? View
+        }
+        return y
+    }
+
+    override fun onBackPressed() {
+        if (tab == 3 && dhikrCat >= 0) { dhikrCat = -1; render(false); return }
+        if (tab != 0) { show(0); return }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
     }
 
     private fun buzz(ms: Long) {
@@ -825,7 +1058,7 @@ class MainActivity : Activity() {
                     prefs.mediaIsVideo = requestCode == REQ_VIDEO
                 }
                 toast("تم ✓")
-                if (tab == 3) render(true)
+                if (tab == 4) render(true)
             }
         }.start()
     }
@@ -852,7 +1085,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 toast("انضافت $n صورة ✓")
-                if (tab == 3) render(true)
+                if (tab == 4) render(true)
             }
         }.start()
     }
