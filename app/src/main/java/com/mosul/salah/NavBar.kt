@@ -24,6 +24,8 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
     private val row = LinearLayout(ctx).apply {
         orientation = LinearLayout.HORIZONTAL
         layoutDirection = View.LAYOUT_DIRECTION_RTL
+        clipChildren = false
+        clipToPadding = false
     }
     private val items = ArrayList<LinearLayout>()
     private val iconViews = ArrayList<ImageView>()
@@ -50,6 +52,8 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 isClickable = true
+                clipChildren = false
+                clipToPadding = false
                 contentDescription = labels[i]
                 setOnClickListener { select(i, true); onPick(i) }
             }
@@ -68,7 +72,8 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
             row.addView(item, LinearLayout.LayoutParams(0, -1, 1f))
             items.add(item); iconViews.add(ic); textViews.add(tv)
         }
-        addView(row, LayoutParams(-1, -1).apply { topMargin = dp(16).toInt() })
+        clipToPadding = false
+        addView(row, LayoutParams(-1, -1).apply { topMargin = dp(18).toInt() })
         applyColors()
     }
 
@@ -90,7 +95,7 @@ class NavBar(ctx: Context, private val onPick: (Int) -> Unit) : FrameLayout(ctx)
             ic.translationY = -dp(14)
             tv.setTextColor(Ui.ACCENT)
             tv.setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-            tv.translationY = -dp(8)
+            tv.translationY = dp(2)
         } else {
             ic.background = null
             ic.setColorFilter(Ui.MUTED)

@@ -36,6 +36,15 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("bgIndex", 0)
         set(v) = sp.edit().putInt("bgIndex", v).apply()
 
+    /** تذكير أذكار بعد الصلاة */
+    var reminderOn: Boolean
+        get() = sp.getBoolean("reminderOn", true)
+        set(v) = sp.edit().putBoolean("reminderOn", v).apply()
+
+    var reminderMin: Int
+        get() = sp.getInt("reminderMin", 10)
+        set(v) = sp.edit().putInt("reminderMin", v).apply()
+
     var hijriAdjust: Int
         get() = sp.getInt("hijriAdjust", 0)
         set(v) = sp.edit().putInt("hijriAdjust", v).apply()

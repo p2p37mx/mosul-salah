@@ -44,6 +44,7 @@
             android:foregroundServiceType="mediaPlayback" />
 
         <receiver android:name=".AdhanReceiver" android:exported="false" />
+        <receiver android:name=".ReminderReceiver" android:exported="false" />
 
         <receiver android:name=".PrayerWidget" android:exported="false">
             <intent-filter>

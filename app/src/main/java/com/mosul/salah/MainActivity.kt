@@ -58,6 +58,11 @@ class MainActivity : Activity() {
     private val REQ_VIDEO = 12
     private val REQ_IMAGE = 13
     private val REQ_BG = 14
+
+    companion object {
+        const val EXTRA_TAB = "open_tab"
+        const val EXTRA_DHIKR_TAB = "dhikr_tab"
+    }
     private lateinit var rootView: LinearLayout
 
     /** الرسومات الجاهزة لمعالم الموصل */
@@ -88,7 +93,7 @@ class MainActivity : Activity() {
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         nav = NavBar(this) { show(it) }
-        root.addView(nav, LinearLayout.LayoutParams(-1, Ui.dp(this, 84)))
+        root.addView(nav, LinearLayout.LayoutParams(-1, Ui.dp(this, 92)))
         rootView = root
         setContentView(root)
 
@@ -101,7 +106,8 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         Scheduler.scheduleNext(this)
-        show(0)
+        dhikrTab = intent.getIntExtra(EXTRA_DHIKR_TAB, dhikrTab)
+        show(intent.getIntExtra(EXTRA_TAB, 0))
     }
 
     override fun onStart() {
@@ -588,6 +594,28 @@ class MainActivity : Activity() {
         }
         look.addView(lb, LinearLayout.LayoutParams(-1, -2))
         p.addView(look, LinearLayout.LayoutParams(-1, -2))
+
+        // تذكير الأذكار بعد الصلاة
+        val rem = Ui.card(this)
+        val rh = Ui.hbox(this)
+        val rc = Ui.vbox(this)
+        rc.addView(Ui.text(this, "تذكير أذكار بعد الصلاة", 15f, Ui.TEXT, true))
+        rc.addView(Ui.text(this, if (prefs.reminderOn) "يوصلك إشعار بعد كل صلاة بـ ${prefs.reminderMin} دقايق" else "مطفي", 12f, Ui.MUTED))
+        rh.addView(rc, LinearLayout.LayoutParams(0, -2, 1f))
+        rh.addView(Ui.segment(this, arrayOf("مطفي", "شغّال"), if (prefs.reminderOn) 1 else 0) {
+            prefs.reminderOn = it == 1; Scheduler.scheduleReminder(this); render(true)
+        }, LinearLayout.LayoutParams(Ui.dp(this, 140), -2))
+        rem.addView(rh, LinearLayout.LayoutParams(-1, -2))
+        if (prefs.reminderOn) {
+            val mr = Ui.hbox(this)
+            mr.addView(Ui.text(this, "بعد كم دقيقة", 13f, Ui.MUTED), LinearLayout.LayoutParams(0, -2, 1f))
+            val rm = prefs.reminderMin
+            mr.addView(Ui.small(this, "+", "زيادة دقيقة") { prefs.reminderMin = minOf(60, rm + 1); Scheduler.scheduleReminder(this); render(true) })
+            mr.addView(Ui.text(this, rm.toString(), 16f, Ui.ACCENT, true).apply { gravity = Gravity.CENTER; minWidth = Ui.dp(this@MainActivity, 40) })
+            mr.addView(Ui.small(this, "−", "إنقاص دقيقة") { prefs.reminderMin = maxOf(1, rm - 1); Scheduler.scheduleReminder(this); render(true) })
+            rem.addView(mr, LinearLayout.LayoutParams(-1, -2))
+        }
+        p.addView(rem, LinearLayout.LayoutParams(-1, -2))
 
         // ٢) صوت الأذان
         val snd = Ui.card(this)
