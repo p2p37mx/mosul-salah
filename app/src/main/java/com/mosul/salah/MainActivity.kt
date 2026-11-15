@@ -76,7 +76,7 @@ class MainActivity : Activity() {
     // ───── البوصلة ─────
     private var compass: CompassView? = null
     private var qiblaStatus: TextView? = null
-    private var calibHint: TextView? = null
+    private var calibHint: View? = null
     private var smoothAz = Double.NaN
     private var wasAligned = false
     private val declination: Float by lazy {
