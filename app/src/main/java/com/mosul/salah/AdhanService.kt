@@ -23,6 +23,67 @@ class AdhanService : Service() {
     private var player: MediaPlayer? = null
     private var wake: PowerManager.WakeLock? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var session: android.media.session.MediaSession? = null
+    private var keyReceiver: android.content.BroadcastReceiver? = null
+    private var startedAt = 0L
+
+    /** أول ثانيتين نتجاهل الأزرار (لأن الشاشة تشتغل وحدها وقت الأذان) */
+    private fun graceOver(): Boolean = android.os.SystemClock.elapsedRealtime() - startedAt > 2500
+
+    /** زر الإطفاء ورفع/خفض الصوت يوقفون الأذان */
+    private fun listenToButtons() {
+        startedAt = android.os.SystemClock.elapsedRealtime()
+        // ١) أزرار الصوت: جلسة ميديا تستلم ضغطات الصوت
+        try {
+            val ms = android.media.session.MediaSession(this, "adhan")
+            ms.setPlaybackState(
+                android.media.session.PlaybackState.Builder()
+                    .setState(android.media.session.PlaybackState.STATE_PLAYING, 0L, 1f)
+                    .setActions(
+                        android.media.session.PlaybackState.ACTION_STOP or
+                            android.media.session.PlaybackState.ACTION_PAUSE or
+                            android.media.session.PlaybackState.ACTION_PLAY_PAUSE
+                    ).build()
+            )
+            ms.setCallback(object : android.media.session.MediaSession.Callback() {
+                override fun onStop() { stopAll() }
+                override fun onPause() { stopAll() }
+            })
+            ms.setPlaybackToRemote(object : android.media.VolumeProvider(
+                android.media.VolumeProvider.VOLUME_CONTROL_RELATIVE, 100, 50
+            ) {
+                override fun onAdjustVolume(direction: Int) {
+                    if (graceOver()) handler.post { stopAll() }
+                }
+            })
+            ms.isActive = true
+            session = ms
+        } catch (_: Exception) {}
+
+        // ٢) زر الإطفاء (الشاشة تنطفي أو تشتغل) + احتياط لتغيّر الصوت
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) {
+                if (graceOver()) stopAll()
+            }
+        }
+        val f = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction("android.media.VOLUME_CHANGED_ACTION")
+        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED)
+            else registerReceiver(r, f)
+            keyReceiver = r
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseButtons() {
+        try { keyReceiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        keyReceiver = null
+        try { session?.isActive = false; session?.release() } catch (_: Exception) {}
+        session = null
+    }
 
     companion object {
         const val CHANNEL = "adhan_channel"
@@ -111,7 +172,9 @@ class AdhanService : Service() {
         val pm = getSystemService(PowerManager::class.java)
         wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "salah:adhan").apply { acquire(15 * 60_000L) }
 
+        releaseButtons()
         play()
+        listenToButtons()
         // أمان: يوقف بعد 15 دقيقة كحد أقصى
         handler.postDelayed({ stopAll() }, 15 * 60_000L)
         return Service.START_NOT_STICKY
@@ -148,6 +211,7 @@ class AdhanService : Service() {
     }
 
     private fun stopAll() {
+        releaseButtons()
         handler.removeCallbacksAndMessages(null)
         try { player?.stop() } catch (_: Exception) {}
         player?.release()
@@ -160,6 +224,7 @@ class AdhanService : Service() {
     }
 
     override fun onDestroy() {
+        releaseButtons()
         handler.removeCallbacksAndMessages(null)
         player?.release()
         player = null

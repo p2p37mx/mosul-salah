@@ -97,7 +97,7 @@ object PrayerCalc {
     /** أوقات اليوم كملي ثانية (بساعة التطبيق) مع التعديلات اليدوية */
     fun times(ctx: Context, date: LocalDate): LongArray {
         val p = Prefs(ctx)
-        val h = hours(date, p.method, p.asrFactor)
+        val h = hours(date, 0, 1)
         val base = date.atStartOfDay(ZONE).toInstant().toEpochMilli()
         return LongArray(6) {
             val minutes = (h[it] * 60.0).roundToLong() + p.offset(it)

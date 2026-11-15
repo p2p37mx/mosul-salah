@@ -55,18 +55,16 @@ class AdhanActivity : Activity() {
 
     private fun render(intent: Intent) {
         val idx = intent.getIntExtra(Scheduler.EXTRA_PRAYER, 0)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Ui.BG)
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(Ui.dp(this@AdhanActivity, 24), Ui.dp(this@AdhanActivity, 40), Ui.dp(this@AdhanActivity, 24), Ui.dp(this@AdhanActivity, 40))
-        }
+        val ctx = this
+        val white = android.graphics.Color.WHITE
+        val gold = android.graphics.Color.parseColor("#F0C979")
 
-        val img = ImageView(this).apply {
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_CENTER
+        // الصورة بملء الشاشة
+        val root = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.parseColor("#0D1B1E"))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         val path = Prefs(this).imagePath
         var hasImage = false
         if (path.isNotEmpty() && File(path).exists()) {
@@ -75,7 +73,7 @@ class AdhanActivity : Activity() {
                     val src = ImageDecoder.createSource(File(path))
                     val d = ImageDecoder.decodeDrawable(src) { decoder, info, _ ->
                         val side = maxOf(info.size.width, info.size.height)
-                        if (side > 1600) decoder.setTargetSampleSize(side / 1600 + 1)
+                        if (side > 2000) decoder.setTargetSampleSize(side / 2000 + 1)
                     }
                     img.setImageDrawable(d)
                     if (d is AnimatedImageDrawable) {
@@ -84,45 +82,89 @@ class AdhanActivity : Activity() {
                     }
                     hasImage = true
                 } else {
-                    val bmp = AdhanService.loadBitmap(path, 1600)
+                    val bmp = AdhanService.loadBitmap(path, 2000)
                     if (bmp != null) { img.setImageBitmap(bmp); hasImage = true }
                 }
             } catch (e: Throwable) {
                 hasImage = false
             }
         }
-        if (hasImage) {
-            root.addView(img, LinearLayout.LayoutParams(-1, 0, 1f).apply {
-                bottomMargin = Ui.dp(this@AdhanActivity, 24)
-            })
-        } else {
-            root.addView(TextView(this).apply {
-                text = "☾"
-                textSize = 96f
-                setTextColor(Ui.ACCENT)
-                gravity = Gravity.CENTER
-            })
-        }
+        if (!hasImage) img.setImageResource(R.drawable.bg_hadba)
+        root.addView(img, android.widget.FrameLayout.LayoutParams(-1, -1))
 
-        root.addView(TextView(this).apply {
+        // تظليل تحت حتى الكتابة تبين
+        root.addView(View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(android.graphics.Color.argb(0, 0, 0, 0), android.graphics.Color.argb(40, 0, 0, 0), android.graphics.Color.argb(215, 0, 0, 0))
+            )
+        }, android.widget.FrameLayout.LayoutParams(-1, -1))
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(Ui.dp(ctx, 24), 0, Ui.dp(ctx, 24), Ui.dp(ctx, 48))
+        }
+        fun shade(t: TextView): TextView { t.setShadowLayer(10f, 0f, 2f, android.graphics.Color.argb(220, 0, 0, 0)); return t }
+        box.addView(shade(TextView(this).apply {
             text = AdhanService.title(idx)
-            textSize = 28f
-            setTextColor(Ui.ACCENT)
+            textSize = 30f
+            setTextColor(gold)
             gravity = Gravity.CENTER
             setTypeface(typeface, android.graphics.Typeface.BOLD)
-        })
-        root.addView(TextView(this).apply {
-            text = "${PrayerCalc.fmt(AppClock.now(this@AdhanActivity))} · الموصل"
-            textSize = 16f
-            setTextColor(Ui.MUTED)
+        }))
+        box.addView(shade(TextView(this).apply {
+            text = "${PrayerCalc.fmt(AppClock.now(ctx))} · الموصل"
+            textSize = 17f
+            setTextColor(white)
             gravity = Gravity.CENTER
-            setPadding(0, Ui.dp(this@AdhanActivity, 8), 0, Ui.dp(this@AdhanActivity, 28))
-        })
-        root.addView(Ui.button(this, "إيقاف الأذان", true) {
-            startService(Intent(this, AdhanService::class.java).setAction(AdhanService.ACTION_STOP))
-            finish()
+            setPadding(0, Ui.dp(ctx, 8), 0, Ui.dp(ctx, 8))
+        }))
+        box.addView(shade(TextView(this).apply {
+            text = "زر الصوت أو زر القفل يوقف الأذان"
+            textSize = 13f
+            setTextColor(android.graphics.Color.argb(220, 255, 255, 255))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, Ui.dp(ctx, 22))
+        }))
+        box.addView(TextView(this).apply {
+            text = "إيقاف الأذان"
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(android.graphics.Color.parseColor("#0D1B1E"))
+            background = Ui.bg(ctx, gold, 28)
+            setOnClickListener { stopAdhan() }
         }, LinearLayout.LayoutParams(-1, Ui.dp(this, 56)))
+        root.addView(box, android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         setContentView(root)
+        hideBars()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hideBars() {
+        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+    }
+
+    private fun stopAdhan() {
+        startService(Intent(this, AdhanService::class.java).setAction(AdhanService.ACTION_STOP))
+        finish()
+    }
+
+    /** أزرار الصوت توقف الأذان وهاي الشاشة مفتوحة */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN ||
+            keyCode == android.view.KeyEvent.KEYCODE_VOLUME_MUTE
+        ) {
+            stopAdhan()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {

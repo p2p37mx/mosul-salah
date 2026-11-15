@@ -28,7 +28,7 @@ import java.time.YearMonth
 
 class MainActivity : Activity() {
     private lateinit var content: FrameLayout
-    private lateinit var nav: LinearLayout
+    private lateinit var nav: NavBar
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var prefs: Prefs
 
@@ -87,11 +87,8 @@ class MainActivity : Activity() {
         }
         content = FrameLayout(this)
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-        nav = Ui.hbox(this).apply {
-            setBackgroundColor(Ui.NAV)
-            setPadding(0, Ui.dp(this@MainActivity, 6), 0, Ui.dp(this@MainActivity, 6))
-        }
-        root.addView(nav, LinearLayout.LayoutParams(-1, -2))
+        nav = NavBar(this) { show(it) }
+        root.addView(nav, LinearLayout.LayoutParams(-1, Ui.dp(this, 84)))
         rootView = root
         setContentView(root)
 
@@ -127,35 +124,29 @@ class MainActivity : Activity() {
         window.statusBarColor = Ui.BG
         window.navigationBarColor = Ui.NAV
         rootView.setBackgroundColor(Ui.BG)
-        nav.setBackgroundColor(Ui.NAV)
-        buildNav()
+        nav.applyColors()
         render(true)
         PrayerWidget.updateAll(this)
     }
 
     /** صورة الخلفية الحالية: رسومات جاهزة + صورك */
-    private fun addBackground() {
+    /** صورة الجامع الحالية (تتبدل كل فتح): رسومات جاهزة + صورك */
+    private fun mosqueImage(): ImageView {
         val users = userBgs()
         val total = BUILT_IN_BG.size + users.size
+        // إذا ضايف صور، نعرض صورك أول شي
         val idx = ((prefs.bgIndex % total) + total) % total
+        val pick = if (users.isNotEmpty()) BUILT_IN_BG.size + (idx % users.size) else idx
         val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         var ok = false
-        if (idx < BUILT_IN_BG.size) {
-            img.setImageResource(BUILT_IN_BG[idx]); ok = true
+        if (pick < BUILT_IN_BG.size) {
+            img.setImageResource(BUILT_IN_BG[pick]); ok = true
         } else {
-            val bmp = AdhanService.loadBitmap(users[idx - BUILT_IN_BG.size].absolutePath, 1400)
+            val bmp = AdhanService.loadBitmap(users[pick - BUILT_IN_BG.size].absolutePath, 1400)
             if (bmp != null) { img.setImageBitmap(bmp); ok = true }
         }
         if (!ok) img.setImageResource(BUILT_IN_BG[0])
-        content.addView(img, FrameLayout.LayoutParams(-1, -1))
-        // طبقة شفافة حتى الكتابة تنقرا (أغمق تحت)
-        val scrim = View(this).apply {
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Ui.alpha(Ui.BG, if (Ui.dark) 90 else 150), Ui.alpha(Ui.BG, if (Ui.dark) 200 else 225), Ui.alpha(Ui.BG, 245))
-            )
-        }
-        content.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+        return img
     }
 
     override fun onPause() {
@@ -165,26 +156,9 @@ class MainActivity : Activity() {
 
     // ───────────── التنقل ─────────────
 
-    private fun buildNav() {
-        nav.removeAllViews()
-        val labels = arrayOf("الأوقات", "التقويم", "الأذكار", "الضبط")
-        labels.forEachIndexed { i, s ->
-            val on = i == tab
-            nav.addView(TextView(this).apply {
-                text = s
-                textSize = 14f
-                gravity = Gravity.CENTER
-                minHeight = Ui.dp(this@MainActivity, 48)
-                setTextColor(if (on) Ui.ACCENT else Ui.MUTED)
-                if (on) setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-                setOnClickListener { show(i) }
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-        }
-    }
-
     private fun show(t: Int) {
         tab = t
-        buildNav()
+        nav.select(t, true)
         render(false)
     }
 
@@ -194,7 +168,6 @@ class MainActivity : Activity() {
         clockView = null
         countView = null
         content.removeAllViews()
-        if (tab == 0) addBackground()
         val body = when (tab) {
             1 -> calendarView()
             2 -> adhkarView()
@@ -243,28 +216,45 @@ class MainActivity : Activity() {
 
         val (ni, nt) = PrayerCalc.next(this, now, false)
         nextTime = nt
-        val hero = Ui.card(this).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            background = Ui.bg(this@MainActivity, Ui.alpha(Ui.CARD, 215), 20, Ui.LINE)
+        // كارت الصلاة القادمة: صورة الجامع واضحة والكتابة فوگها
+        val hero = FrameLayout(this).apply {
+            background = Ui.bg(this@MainActivity, Ui.CARD, 22)
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
         }
-        hero.addView(Ui.text(this, "الصلاة القادمة", 14f, Ui.MUTED).apply { gravity = Gravity.CENTER })
-        hero.addView(Ui.text(this, PrayerCalc.NAMES[ni], 30f, Ui.ACCENT, true).apply { gravity = Gravity.CENTER })
-        val cd = Ui.text(this, "", 44f, Ui.TEXT, true).apply {
+        hero.addView(mosqueImage(), FrameLayout.LayoutParams(-1, -1))
+        hero.addView(View(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(android.graphics.Color.argb(20, 0, 0, 0), android.graphics.Color.argb(70, 0, 0, 0), android.graphics.Color.argb(200, 0, 0, 0))
+            )
+        }, FrameLayout.LayoutParams(-1, -1))
+        val heroText = Ui.vbox(this).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            setPadding(Ui.dp(this@MainActivity, 16), 0, Ui.dp(this@MainActivity, 16), Ui.dp(this@MainActivity, 16))
+        }
+        val white = android.graphics.Color.WHITE
+        val gold = android.graphics.Color.parseColor("#F0C979")
+        fun shade(t: TextView): TextView { t.setShadowLayer(8f, 0f, 2f, android.graphics.Color.argb(200, 0, 0, 0)); return t }
+        heroText.addView(shade(Ui.text(this, "الصلاة القادمة", 14f, white).apply { gravity = Gravity.CENTER }))
+        heroText.addView(shade(Ui.text(this, PrayerCalc.NAMES[ni], 30f, gold, true).apply { gravity = Gravity.CENTER }))
+        val cd = shade(Ui.text(this, "", 44f, white, true).apply {
             gravity = Gravity.CENTER
             textDirection = View.TEXT_DIRECTION_LTR
             fontFeatureSettings = "tnum"
-        }
+        })
         countView = cd
-        hero.addView(cd)
-        hero.addView(Ui.text(this, "متبقي على الأذان · ${PrayerCalc.fmt(nt)}", 13f, Ui.MUTED).apply { gravity = Gravity.CENTER })
-        p.addView(hero, LinearLayout.LayoutParams(-1, -2))
+        heroText.addView(cd)
+        heroText.addView(shade(Ui.text(this, "متبقي على الأذان · ${PrayerCalc.fmt(nt)}", 13f, white).apply { gravity = Gravity.CENTER }))
+        hero.addView(heroText, FrameLayout.LayoutParams(-1, -1))
+        p.addView(hero, LinearLayout.LayoutParams(-1, Ui.dp(this, 280)))
 
         val ts = PrayerCalc.times(this, today)
         val nextToday = ts.indexOfFirst { it == nt }
         for (i in 0 until 6) {
             val on = i == nextToday
             val row = Ui.hbox(this).apply {
-                background = Ui.bg(this@MainActivity, if (on) Ui.ACCENT else Ui.alpha(Ui.ROW, 215), 16)
+                background = Ui.bg(this@MainActivity, if (on) Ui.ACCENT else Ui.ROW, 16)
                 setPadding(Ui.dp(this@MainActivity, 18), 0, Ui.dp(this@MainActivity, 18), 0)
                 minimumHeight = Ui.dp(this@MainActivity, 52)
             }
@@ -399,42 +389,134 @@ class MainActivity : Activity() {
         val p = page()
         p.addView(title("الأذكار"))
         p.addView(Ui.segment(this, Adhkar.TABS, dhikrTab) { dhikrTab = it; render(false) }, LinearLayout.LayoutParams(-1, -2))
-        p.addView(Ui.text(this, "دوس على الذكر حتى ينقص العدد", 12f, Ui.MUTED))
 
-        Adhkar.list(dhikrTab).forEachIndexed { i, d ->
-            val key = "$dhikrTab-$i"
-            val left = counts[key] ?: d.count
-            val done = left == 0
-            val card = Ui.card(this).apply {
-                alpha = if (done) 0.45f else 1f
-                setOnClickListener {
-                    val cur = counts[key] ?: d.count
-                    if (cur > 0) { counts[key] = cur - 1; render(true) }
-                }
+        val list = Adhkar.list(dhikrTab)
+        val tabKey = dhikrTab
+        fun leftOf(i: Int): Int = counts["$tabKey-$i"] ?: list[i].count
+        fun doneCount(): Int = list.indices.count { leftOf(it) == 0 }
+
+        // ملخص التقدم
+        val sum = Ui.card(this).apply {
+            background = Ui.bg(this@MainActivity, Ui.alpha(Ui.ACCENT, if (Ui.dark) 34 else 26), 20, Ui.alpha(Ui.ACCENT, 120))
+        }
+        val heads = arrayOf("أذكار الصباح", "أذكار المساء", "أذكار بعد الصلاة")
+        val hints = arrayOf("من بعد الفجر لحد طلوع الشمس", "من بعد العصر لحد المغرب", "بعد السلام من كل صلاة")
+        sum.addView(Ui.text(this, heads[tabKey], 20f, Ui.ACCENT, true))
+        sum.addView(Ui.text(this, hints[tabKey], 13f, Ui.MUTED))
+        val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = list.size
+            progress = doneCount()
+            progressTintList = android.content.res.ColorStateList.valueOf(Ui.ACCENT)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Ui.LINE)
+        }
+        sum.addView(bar, LinearLayout.LayoutParams(-1, Ui.dp(this, 10)))
+        val sumText = Ui.text(this, "", 13f, Ui.TEXT, true)
+        fun refreshSum() {
+            val d = doneCount()
+            bar.progress = d
+            sumText.text = if (d == list.size) "تقبّل الله ✓ خلصت كل الأذكار" else "أنجزت $d من ${list.size}"
+        }
+        refreshSum()
+        sum.addView(sumText)
+        p.addView(sum, LinearLayout.LayoutParams(-1, -2))
+
+        val cards = ArrayList<View>()
+        list.forEachIndexed { i, d ->
+            val key = "$tabKey-$i"
+            val card = Ui.vbox(this, 12).apply {
+                setPadding(Ui.dp(this@MainActivity, 18), Ui.dp(this@MainActivity, 16), Ui.dp(this@MainActivity, 18), Ui.dp(this@MainActivity, 16))
+                isClickable = true
             }
-            if (d.note.isNotEmpty()) card.addView(Ui.text(this, d.note, 12f, Ui.ACCENT, true))
-            card.addView(Ui.text(this, d.text, 18f).apply { setLineSpacing(0f, 1.35f) })
-            val foot = Ui.hbox(this)
-            foot.addView(Ui.text(this, "التكرار: ${d.count}", 12f, Ui.MUTED), LinearLayout.LayoutParams(0, -2, 1f))
-            foot.addView(TextView(this).apply {
-                text = if (done) "تم ✓" else left.toString()
-                textSize = 16f
+            fun style() {
+                val done = leftOf(i) == 0
+                card.background = Ui.bg(this@MainActivity, Ui.CARD, 22, if (done) Ui.ACCENT else Ui.LINE)
+                card.alpha = if (done) 0.7f else 1f
+            }
+
+            // الرأس: رقم الذكر + ملاحظة + عدد التكرار
+            val top = Ui.hbox(this)
+            top.addView(TextView(this).apply {
+                text = (i + 1).toString()
+                textSize = 13f
                 gravity = Gravity.CENTER
                 setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-                setTextColor(Ui.BG)
-                background = Ui.bg(this@MainActivity, Ui.ACCENT, 20)
-                minWidth = Ui.dp(this@MainActivity, 56)
-                minHeight = Ui.dp(this@MainActivity, 36)
-                setPadding(Ui.dp(this@MainActivity, 10), 0, Ui.dp(this@MainActivity, 10), 0)
+                setTextColor(Ui.ACCENT)
+                background = Ui.bg(this@MainActivity, Ui.alpha(Ui.ACCENT, 30), 15, Ui.ACCENT)
+            }, LinearLayout.LayoutParams(Ui.dp(this, 30), Ui.dp(this, 30)))
+            if (d.note.isNotEmpty()) {
+                top.addView(TextView(this).apply {
+                    text = d.note
+                    textSize = 12f
+                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                    setTextColor(Ui.ACCENT)
+                    background = Ui.bg(this@MainActivity, Ui.alpha(Ui.ACCENT, 28), 10)
+                    setPadding(Ui.dp(this@MainActivity, 10), Ui.dp(this@MainActivity, 4), Ui.dp(this@MainActivity, 10), Ui.dp(this@MainActivity, 4))
+                }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = Ui.dp(this@MainActivity, 8) })
+            }
+            top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            top.addView(Ui.text(this, if (d.count == 1) "مرة وحدة" else "× ${d.count}", 13f, Ui.MUTED, true))
+            card.addView(top, LinearLayout.LayoutParams(-1, -2))
+
+            // نص الذكر
+            card.addView(Ui.text(this, d.text, 19f).apply {
+                gravity = Gravity.CENTER
+                setLineSpacing(0f, 1.5f)
+                setPadding(0, Ui.dp(this@MainActivity, 4), 0, Ui.dp(this@MainActivity, 4))
+            }, LinearLayout.LayoutParams(-1, -2))
+
+            // زخرفة: خط — معيّن — خط
+            val orn = Ui.hbox(this).apply { gravity = Gravity.CENTER }
+            orn.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, Ui.dp(this, 1), 1f))
+            orn.addView(View(this).apply {
+                background = Ui.bg(this@MainActivity, Ui.ACCENT, 1); rotation = 45f
+            }, LinearLayout.LayoutParams(Ui.dp(this, 8), Ui.dp(this, 8)).apply {
+                marginStart = Ui.dp(this@MainActivity, 10); marginEnd = Ui.dp(this@MainActivity, 10)
             })
-            card.addView(foot, LinearLayout.LayoutParams(-1, -2))
+            orn.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, Ui.dp(this, 1), 1f))
+            card.addView(orn, LinearLayout.LayoutParams(-1, -2))
+
+            // العداد الدائري
+            val ring = RingView(this).apply { set(d.count, leftOf(i)) }
+            val bottom = Ui.vbox(this).apply { gravity = Gravity.CENTER_HORIZONTAL }
+            bottom.addView(ring, LinearLayout.LayoutParams(Ui.dp(this, 78), Ui.dp(this, 78)))
+            val hint = Ui.text(this, "دوس على الكارت للتسبيح", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER }
+            hint.visibility = if (leftOf(i) == 0) View.GONE else View.VISIBLE
+            bottom.addView(hint)
+            card.addView(bottom, LinearLayout.LayoutParams(-1, -2))
+
+            style()
+            card.setOnClickListener {
+                val cur = leftOf(i)
+                if (cur == 0) return@setOnClickListener
+                counts[key] = cur - 1
+                ring.set(d.count, cur - 1)
+                buzz(if (cur - 1 == 0) 60L else 15L)
+                if (cur - 1 == 0) {
+                    hint.visibility = View.GONE
+                    style()
+                    refreshSum()
+                    // ينتقل للذكر اللي بعده
+                    if (i + 1 < cards.size) {
+                        val next = cards[i + 1]
+                        scroll?.postDelayed({ scroll?.smoothScrollTo(0, next.top - Ui.dp(this, 12)) }, 250)
+                    }
+                }
+            }
+            cards.add(card)
             p.addView(card, LinearLayout.LayoutParams(-1, -2))
         }
         p.addView(Ui.button(this, "إعادة العداد", false) {
-            counts.keys.filter { it.startsWith("$dhikrTab-") }.forEach { counts.remove(it) }
+            counts.keys.filter { it.startsWith("$tabKey-") }.toList().forEach { counts.remove(it) }
             render(false)
         }, LinearLayout.LayoutParams(-1, -2))
         return p
+    }
+
+    private fun buzz(ms: Long) {
+        try {
+            val v = getSystemService(android.os.Vibrator::class.java) ?: return
+            v.vibrate(android.os.VibrationEffect.createOneShot(ms, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        } catch (_: Exception) {}
     }
 
     // ───────────── الضبط ─────────────
@@ -485,7 +567,7 @@ class MainActivity : Activity() {
         val ub = userBgs()
         look.addView(Ui.text(this, "صور الخلفية", 15f, Ui.TEXT, true))
         look.addView(Ui.text(this,
-            "تتبدل كل ما تفتح التطبيق: ${BUILT_IN_BG.size} رسومات لمعالم الموصل" +
+            "تطلع بكارت الصلاة القادمة وتتبدل كل ما تفتح التطبيق: ${BUILT_IN_BG.size} رسومات لمعالم الموصل" +
                 if (ub.isNotEmpty()) " + ${ub.size} من صورك" else "", 12f, Ui.MUTED))
         val lb = Ui.hbox(this)
         lb.addView(Ui.button(this, "إضافة صور جوامع", false) {
@@ -590,19 +672,6 @@ class MainActivity : Activity() {
             off.addView(r, LinearLayout.LayoutParams(-1, -2))
         }
         p.addView(off, LinearLayout.LayoutParams(-1, -2))
-
-        // ٥) طريقة الحساب
-        val m = Ui.card(this)
-        m.addView(Ui.text(this, "طريقة الحساب", 16f, Ui.TEXT, true))
-        m.addView(Ui.segment(this, arrayOf("الرابطة", "أم القرى", "المصرية"), prefs.method) {
-            prefs.method = it; Scheduler.scheduleNext(this); render(true)
-        }, LinearLayout.LayoutParams(-1, -2))
-        m.addView(Ui.text(this, PrayerCalc.METHODS[prefs.method], 12f, Ui.MUTED))
-        m.addView(Ui.text(this, "وقت العصر", 14f, Ui.TEXT, true))
-        m.addView(Ui.segment(this, arrayOf("شافعي", "حنفي"), prefs.asrFactor - 1) {
-            prefs.asrFactor = it + 1; Scheduler.scheduleNext(this); render(true)
-        }, LinearLayout.LayoutParams(-1, -2))
-        p.addView(m, LinearLayout.LayoutParams(-1, -2))
 
         // ٦) تصحيح الهجري
         val hj = Ui.card(this)
