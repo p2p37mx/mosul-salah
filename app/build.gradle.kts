@@ -11,8 +11,9 @@ android {
         applicationId = "com.mosul.salah"
         minSdk = 26
         targetSdk = 33
-        versionCode = 6
-        versionName = "1.5"
+        // رقم البناء = رقم بناء GitHub حتى زر التحديثات يعرف النسخة الأحدث
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 6
+        versionName = "1.6"
     }
 
     signingConfigs {

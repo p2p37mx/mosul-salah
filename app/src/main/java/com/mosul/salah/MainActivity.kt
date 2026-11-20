@@ -964,7 +964,74 @@ class MainActivity : Activity() {
         p.addView(Ui.button(this, "إعدادات التطبيق (الإشعارات والبطارية)", false) { openAppSettings() },
             LinearLayout.LayoutParams(-1, -2))
         p.addView(Ui.text(this, "مهم: خلي البطارية «بدون قيود» لهذا التطبيق حتى الأذان يشتغل بوقته", 12f, Ui.MUTED))
+
+        // التحديثات
+        val upStatus = Ui.text(this, "يفحص إذا أكو نسخة جديدة من التطبيق ويحدثه مباشرة بدون ما تنصّبه من جديد", 12f, Ui.MUTED)
+        p.addView(Ui.button(this, "التحديثات", true) { checkUpdate(upStatus) }, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = Ui.dp(this@MainActivity, 8)
+        })
+        p.addView(upStatus)
+
+        // الحقوق
+        val foot = Ui.vbox(this, 4).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, Ui.dp(this@MainActivity, 24), 0, Ui.dp(this@MainActivity, 8))
+        }
+        foot.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.dp(this, 80), Ui.dp(this, 1)))
+        foot.addView(Ui.text(this, "مواعيد الصلاة - الموصل", 14f, Ui.TEXT, true).apply { gravity = Gravity.CENTER })
+        foot.addView(Ui.text(this, "تطوير: علي حميد", 13f, Ui.ACCENT, true).apply { gravity = Gravity.CENTER })
+        foot.addView(Ui.text(this, "الإصدار ${Updater.installedName(this)} · بناء ${Updater.installedBuild(this)}", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER })
+        foot.addView(Ui.text(this, "© ${java.time.Year.now(PrayerCalc.ZONE)} جميع الحقوق محفوظة", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER })
+        p.addView(foot, LinearLayout.LayoutParams(-1, -2))
         return p
+    }
+
+    private var updating = false
+
+    private fun checkUpdate(status: TextView) {
+        if (updating) return
+        status.text = "جاري الفحص…"
+        status.setTextColor(Ui.MUTED)
+        Updater.check { r, err ->
+            if (r == null) {
+                status.text = err ?: "صار خطأ"
+                return@check
+            }
+            val mine = Updater.installedBuild(this)
+            if (r.build <= mine) {
+                status.text = "أنت على آخر نسخة ✓ (بناء $mine)"
+                status.setTextColor(Ui.ACCENT)
+                return@check
+            }
+            status.text = "أكو تحديث جديد: بناء ${r.build}"
+            status.setTextColor(Ui.ACCENT)
+            android.app.AlertDialog.Builder(this)
+                .setTitle("أكو تحديث جديد")
+                .setMessage("نسختك: بناء $mine\nالجديدة: بناء ${r.build}\n\nتريد تحدّث هسه؟ إعداداتك تبقى مثل ما هي.")
+                .setPositiveButton("تحديث") { _, _ -> startUpdate(r, status) }
+                .setNegativeButton("بعدين", null)
+                .show()
+        }
+    }
+
+    private fun startUpdate(r: Updater.Release, status: TextView) {
+        // لازم توافق مرة وحدة على «تثبيت التطبيقات من هذا المصدر»
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            toast("اسمح للتطبيق بتثبيت التحديثات، وبعدين ارجع ودوس التحديثات مرة ثانية")
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (e: Exception) { openAppSettings() }
+            return
+        }
+        updating = true
+        status.text = "جاري التنزيل…"
+        Updater.install(this, r,
+            onProgress = { pct ->
+                status.text = if (pct >= 100) "جاري التثبيت… وافق على التحديث لما يطلبه الجوال" else "جاري التنزيل $pct%"
+                if (pct >= 100) updating = false
+            },
+            onError = { msg -> updating = false; status.text = msg }
+        )
     }
 
     private fun spin(value: String, desc: String, up: () -> Unit, down: () -> Unit): View {
