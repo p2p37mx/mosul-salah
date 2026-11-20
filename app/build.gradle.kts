@@ -13,7 +13,7 @@ android {
         targetSdk = 33
         // رقم البناء = رقم بناء GitHub حتى زر التحديثات يعرف النسخة الأحدث
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 6
-        versionName = "1.7"
+        versionName = "1.8"
     }
 
     signingConfigs {

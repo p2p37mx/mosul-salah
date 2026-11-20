@@ -979,9 +979,8 @@ class MainActivity : Activity() {
         }
         foot.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.dp(this, 80), Ui.dp(this, 1)))
         foot.addView(Ui.text(this, "مواعيد الصلاة - الموصل", 14f, Ui.TEXT, true).apply { gravity = Gravity.CENTER })
-        foot.addView(Ui.text(this, "تطوير: علي حميد · تواصل واتساب", 13f, Ui.ACCENT, true).apply {
+        foot.addView(Ui.text(this, "تطوير: علي حميد", 13f, Ui.ACCENT, true).apply {
             gravity = Gravity.CENTER
-            paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
             minHeight = Ui.dp(this@MainActivity, 44)
             contentDescription = "تواصل ويا علي حميد على واتساب"
             setOnClickListener {
