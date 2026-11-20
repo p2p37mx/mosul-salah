@@ -979,7 +979,17 @@ class MainActivity : Activity() {
         }
         foot.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(Ui.dp(this, 80), Ui.dp(this, 1)))
         foot.addView(Ui.text(this, "مواعيد الصلاة - الموصل", 14f, Ui.TEXT, true).apply { gravity = Gravity.CENTER })
-        foot.addView(Ui.text(this, "تطوير: علي حميد", 13f, Ui.ACCENT, true).apply { gravity = Gravity.CENTER })
+        foot.addView(Ui.text(this, "تطوير: علي حميد · تواصل واتساب", 13f, Ui.ACCENT, true).apply {
+            gravity = Gravity.CENTER
+            paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+            minHeight = Ui.dp(this@MainActivity, 44)
+            contentDescription = "تواصل ويا علي حميد على واتساب"
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/9647703000874")))
+                } catch (e: Exception) { toast("ما لكيت واتساب") }
+            }
+        })
         foot.addView(Ui.text(this, "الإصدار ${Updater.installedName(this)} · بناء ${Updater.installedBuild(this)}", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER })
         foot.addView(Ui.text(this, "© ${java.time.Year.now(PrayerCalc.ZONE)} جميع الحقوق محفوظة", 12f, Ui.MUTED).apply { gravity = Gravity.CENTER })
         p.addView(foot, LinearLayout.LayoutParams(-1, -2))
