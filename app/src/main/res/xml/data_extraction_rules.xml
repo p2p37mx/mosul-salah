@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 وأحدث: ملف إعدادات التطبيق (salah.xml) ما ينسخ للسحابة ولا ينتقل لجهاز ثاني -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="salah.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="salah.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 وأقدم: ملف إعدادات التطبيق (salah.xml) ما ينسخ احتياطياً -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="salah.xml" />
+</full-backup-content>
